@@ -222,6 +222,10 @@ int core0_main(void)
 
         if (sleep_counter > 500)    // if sleep_flag is 1 for 5 sec -> consider driver is asleep
         {
+            // TODO (level 1)
+            // 1. Turn on LED
+            // 2. Ring BUZZER
+            // 3. Turn off BUZZER&LED if BUTTON pushed 
             P10_OUT.U |= 0x1 << P1_BIT_LSB_IDX;  // turn on P10.2 (LED D13 BLUE)
         }
 
