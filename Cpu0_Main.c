@@ -100,6 +100,8 @@
 #define DISS_BIT_LSB_IDX            1
 #define DISR_BIT_LSB_IDX            0
 #define SEL7_BIT_LSB_IDX            14
+#define SEL9_BIT_LSB_IDX            18
+#define SEL11_BIT_LSB_IDX           22
 #define EN_FXCLK_BIT_LSB_IDX        22
 #define FXCLK_SEL_BIT_LSB_IDX       0
 
@@ -113,6 +115,9 @@
 #define CLK_SRC_SR_BIT_LSB_IDX      12
 #define SL_BIT_LSB_IDX              11
 
+#define T13_CLK_FREQ                0x6     // 50MHz / 8 = 1562500 Hz
+#define T13_PRESCALER               0x0     // Prescaler disable
+#define T13_INTERRUPT_FREQ          15625   // 0.01s
 
 IfxCpu_syncEvent g_cpuSyncEvent = 0;
 
@@ -128,13 +133,14 @@ void initGTM(void);
 void usonicTrigger(void);
 void initCCU61(void);
 void initUSonic(void);
+void initBuzzer(void);
 
 
 unsigned int range;
 unsigned char range_valid_flag = 0;
 unsigned char sleep_flag = 0;
 unsigned int sleep_counter;
-
+unsigned char a, b, c;
 
 __interrupt(0x0A) __vector_table(0)
 void ERU0_ISR(void)
@@ -159,6 +165,20 @@ void ERU0_ISR(void)
         range_valid_flag = 1;
 
         CCU61_TCTR4.B.T12RES = 0x1;       // reset CCU61 T12 counter
+    }
+
+    // check button pushed
+    a = P02_IN.U & (0x1 << P1_BIT_LSB_IDX); // check button status
+    if(sleep_flag && (range >= 50)) // wake up condition satisfied
+    {
+        if(a==0) // button pushed
+        {
+            sleep_flag = 0;
+            sleep_counter = 0;
+            P10_OUT.U &= ~(0x1 << P1_BIT_LSB_IDX); // Turn off LED
+            P02_IOCR0.B.PC3 = 0x0;  // turn off buzzer
+
+        }
     }
 }
 
@@ -199,9 +219,13 @@ int core0_main(void)
     initLED();
     initRGBLED();
     //initVADC();
-    //initGTM();
+//    initBuzzer();
+    initGTM();
     //initButton();
     initUSonic();
+
+    GTM_TOM0_TGC0_GLB_CTRL.U |= 0x1 << HOST_TRIG_BIT_LSB_IDX;       // trigger update request signal
+    GTM_TOM0_TGC1_GLB_CTRL.U |= 0x1 << HOST_TRIG_BIT_LSB_IDX;       // trigger update request signal
 
     while(1)
     {
@@ -209,24 +233,16 @@ int core0_main(void)
         usonicTrigger();
         while( range_valid_flag == 0);
 
-        if (range <= 50) // if distance between driver <-> sensor is below 50cm
+        if (range <= 50)
         {
             sleep_flag = 1;
         }
-        else
-        {
-            sleep_flag = 0;
-            sleep_counter = 0;
-            P10_OUT.U &= ~(0x1 << P1_BIT_LSB_IDX);
-        }
 
-        if (sleep_counter > 500)    // if sleep_flag is 1 for 5 sec -> consider driver is asleep
+
+        if (sleep_counter > 500)
         {
-            // TODO (level 1)
-            // 1. Turn on LED
-            // 2. Ring BUZZER
-            // 3. Turn off BUZZER&LED if BUTTON pushed 
             P10_OUT.U |= 0x1 << P1_BIT_LSB_IDX;  // turn on P10.2 (LED D13 BLUE)
+            P02_IOCR0.B.PC3 = 0x11; // turn on buzzer
         }
 
     }
@@ -334,9 +350,9 @@ void initCCU60(void)
     SRC_CCU6_CCU60_SR0.U |= 0x1 << SRE_BIT_LSB_IDX;     // SR0 enabled
 
     // T13 configurations
-    CCU60_TCTR0.B.T13CLK = 0x6;     // f_CCU6 = 1.562500 MHz,
-    CCU60_TCTR0.B.T13PRE = 0x0;     // prescaler disable
-    CCU60_T13PR.B.T13PV = 15625 - 1;
+    CCU60_TCTR0.B.T13CLK = T13_CLK_FREQ;                // f_CCU6 = 1.562500 MHz, 1562500 counters per sec
+    CCU60_TCTR0.B.T13PRE = T13_PRESCALER;               // Prescaler disable
+    CCU60_T13PR.B.T13PV = T13_INTERRUPT_FREQ - 1;       // nterrupt every 0.01s
     CCU60_TCTR4.B.T13STR = 0x1;
     CCU60_T13.B.T13CV = 0x0;
     CCU60_IEN.B.ENT13PM = 0x1;
@@ -485,28 +501,90 @@ void initGTM(void)
     GTM_CMU_FXCLK_CTRL.U &= ~(0xF << FXCLK_SEL_BIT_LSB_IDX);  // input clock of CMU_FXCLK --> CMU_GCLK_EN
     GTM_CMU_CLK_EN.U |= 0x2 << EN_FXCLK_BIT_LSB_IDX;        // enable all CMU_FXCLK
 
-    // GTM TOM0 PWM configuration
+    // set TGC0 to enable GTM TOM0 channel 1
     GTM_TOM0_TGC0_GLB_CTRL.U |= 0x2 << UPEN_CTRL1_BIT_LSB_IDX;  // TOM channel 1 enable
-
-    GTM_TOM0_TGC0_FUPD_CTRL.U |= 0x2 << FUPD_CTRL1_BIT_LSB_IDX; // enable force update of TOM channel 1
-    GTM_TOM0_TGC0_FUPD_CTRL.U |= 0x2 << RSCNT0_CN1_BIT_LSB_IDX; // reset CN0 of TOM channel 1
-
     GTM_TOM0_TGC0_ENDIS_CTRL.U |= 0x2 << ENDIS_CTRL1_BIT_LSB_IDX;   // enable channel 1 on update trigger
     GTM_TOM0_TGC0_OUTEN_CTRL.U |= 0x2 << OUTEN_CTRL1_BIT_LSB_IDX;   // enable channel 1 output on update trigger
 
-    GTM_TOM0_CH1_CTRL.U |= 0x1 << SL_BIT_LSB_IDX;                 // high signal level for duty cycle
+
+    // set TGC0 to enable GTM TOM0 channel 2, 3, 15
+    GTM_TOM0_TGC0_GLB_CTRL.B.UPEN_CTRL2 |= 0x2;  // TOM0 channel 2 enable
+    GTM_TOM0_TGC0_GLB_CTRL.B.UPEN_CTRL3 |= 0x2;  // TOM0 channel 3 enable
+    GTM_TOM0_TGC1_GLB_CTRL.B.UPEN_CTRL7 |= 0x2;  // TOM0 channel 15 enable
+
+    GTM_TOM0_TGC0_ENDIS_CTRL.B.ENDIS_CTRL2 |= 0x2;   // enable channel 2 on update trigger
+    GTM_TOM0_TGC0_ENDIS_CTRL.B.ENDIS_CTRL3 |= 0x2;   // enable channel 3 on update trigger
+    GTM_TOM0_TGC1_ENDIS_CTRL.B.ENDIS_CTRL7 |= 0x2;   // enable channel 15 on update trigger
+
+    GTM_TOM0_TGC0_OUTEN_CTRL.B.OUTEN_CTRL2 |= 0x2;   // enable channel 2 output on update trigger
+    GTM_TOM0_TGC0_OUTEN_CTRL.B.OUTEN_CTRL3 |= 0x2;   // enable channel 3 output on update trigger
+    GTM_TOM0_TGC1_OUTEN_CTRL.B.OUTEN_CTRL7 |= 0x2;   // enable channel 15 output on update trigger
+
+
+    // TOM 0_1
+    GTM_TOM0_CH1_CTRL.U |= 0x1 << SL_BIT_LSB_IDX;                   // high signal level for duty cycle
 
     GTM_TOM0_CH1_CTRL.U &= ~(0x7 << CLK_SRC_SR_BIT_LSB_IDX);
-    GTM_TOM0_CH1_CTRL.U |= 0x1 << CLK_SRC_SR_BIT_LSB_IDX;           // clock source --> CMU_FXCLK(1) = 3125 kHz
+    GTM_TOM0_CH1_CTRL.U |= 0x1 << CLK_SRC_SR_BIT_LSB_IDX;           // clock source --> CMU_FXCLK(1) = 6250 kHz
 
-    GTM_TOM0_CH1_SR0.U = 12500 - 1;                             // PWM freq. = 3125 kHz / 12500 = 250 kHz
+    GTM_TOM0_CH1_SR0.U = 12500 - 1;                                 // PWM freq. = 6250 kHz / 12500 = 250 kHz
+    GTM_TOM0_CH1_SR1.U = 1250 - 1;                                  // duty cycle = 6250 / 12500 = 50 %
 
-    GTM_TOM0_CH1_SR1.U = 1250 - 1;                              // duty cycle = 6250 / 12500 = 50 %
+    // TOM 0_2
+    GTM_TOM0_CH2_CTRL.U |= 0x1 << SL_BIT_LSB_IDX;                   // high signal level for duty cycle
 
-    GTM_TOUTSEL6.U &= ~(0x3 << SEL7_BIT_LSB_IDX);                   // TOUT103 --> TOM0 channel 1
-                                                                // 103 = 16 * 6 + 7
-    GTM_TOM0_TGC0_GLB_CTRL.U |= 0x1 << HOST_TRIG_BIT_LSB_IDX;       // trigger update request signal
+    GTM_TOM0_CH2_CTRL.U &= ~(0x7 << CLK_SRC_SR_BIT_LSB_IDX);
+    GTM_TOM0_CH2_CTRL.U |= 0x1 << CLK_SRC_SR_BIT_LSB_IDX;           // clock source --> CMU_FXCLK(1) = 6250 kHz
 
+    GTM_TOM0_CH2_SR0.U = 12500 - 1;                                 // PWM freq. = 6250 kHz / 12500 = 250 kHz
+    //GTM_TOM0_CH2_SR1.U = 12500 - 1;                               // duty cycle = 6250 / 12500 = 50 %
+
+    // TOM 0_3
+    GTM_TOM0_CH3_CTRL.U |= 0x1 << SL_BIT_LSB_IDX;                   // high signal level for duty cycle
+
+    GTM_TOM0_CH3_CTRL.U &= ~(0x7 << CLK_SRC_SR_BIT_LSB_IDX);
+    GTM_TOM0_CH3_CTRL.U |= 0x1 << CLK_SRC_SR_BIT_LSB_IDX;           // clock source --> CMU_FXCLK(1) = 6250 kHz
+
+    GTM_TOM0_CH3_SR0.U = 12500 - 1;                                 // PWM freq. = 6250 kHz / 12500 = 250 kHz
+    //GTM_TOM0_CH3_SR1.U = 125 - 1;                                 // duty cycle = 6250 / 12500 = 50 %
+
+    // TOM 0_15
+    GTM_TOM0_CH15_CTRL.B.SL |= 0x1;                                 // high signal level for duty cycle
+    GTM_TOM0_CH15_CTRL.B.CLK_SRC_SR |= 0x1;                         // clock source --> CMU_FXCLK(1) = 6250 kHz
+
+    GTM_TOM0_CH15_SR0.U = 12500 - 1;                                // PWM freq. = 6250 kHz / 12500 = 250 kHz
+    //GTM_TOM0_CH15_SR1.U = 125 - 1;                                // duty cycle = 6250 / 12500 = 50 %
+
+
+    // TOUT pin selection
+    GTM_TOUTSEL6.U &= ~(0x3 << SEL7_BIT_LSB_IDX);                   // TOUT103  --> TOM0 channel 1
+    GTM_TOUTSEL0.U &= ~(0x3 << SEL7_BIT_LSB_IDX);                   // TOUT7    --> TOM0 channel 15
+    GTM_TOUTSEL6.U &= ~(0x3 << SEL11_BIT_LSB_IDX);                  // TOUT103  --> TOM0 channel 2
+    GTM_TOUTSEL6.U &= ~(0x3 << SEL9_BIT_LSB_IDX);                   // TOUT105  --> TOM0 channel 3
+
+
+
+
+
+    // set GTM TOM0 channel 11 - Buzzer
+    GTM_TOM0_TGC1_GLB_CTRL.B.UPEN_CTRL3     |= 0x2;                   // TOM0 channel 11 enable
+    GTM_TOM0_TGC1_ENDIS_CTRL.B.ENDIS_CTRL3  |= 0x2;                   // enable channel 11 on update trigger
+    GTM_TOM0_TGC1_OUTEN_CTRL.B.OUTEN_CTRL3  |= 0x2;                   // enable channel 11 output on update trigger
+
+
+    // TOM 0_11
+    GTM_TOM0_CH11_CTRL.B.SL = 0x1;                                  // high signal level for duty cycle
+    GTM_TOM0_CH11_CTRL.B.CLK_SRC_SR = 0x1;                          // clock source --> CMU_FXCLK(1) = 6250 kHz
+    GTM_TOM0_CH11_SR0.B.SR0 = 12500 - 1;                            // PWM freq. = 6250 kHz / 12500 = 500 Hz
+    GTM_TOM0_CH11_SR1.B.SR1 = 6250 - 1;                             // duty cycle = 6250 / 12500 = 50 %
+
+    // TOUT pin selection
+    GTM_TOUTSEL0.B.SEL3 = 0x0;                                      // TOUT3  --> TOM0 channel 11
+}
+
+void initBuzzer(void)
+{
+//    P02_IOCR0.B.PC3 = 0x11;
 }
 
 void initUSonic(void)
