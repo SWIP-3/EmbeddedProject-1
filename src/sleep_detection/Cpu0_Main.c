@@ -175,7 +175,7 @@ void CCU60_T13_ISR(void)
 {
     if (sleep_flag == 1)
     {
-        sleep_counter++;
+        sleep_counter++; // 100 counters for 1 sec since interrupt happens every 0.01s
     }
 }
 
@@ -217,11 +217,12 @@ int core0_main(void)
         {
             sleep_flag = 0;
             sleep_counter = 0;
+            P10_OUT.U &= ~(0x1 << P1_BIT_LSB_IDX);
         }
 
         if (sleep_counter > 500)
         {
-            P10_OUT.U ^= 0x1 << P1_BIT_LSB_IDX;  // toggle P10.2 (LED D13 BLUE)
+            P10_OUT.U |= 0x1 << P1_BIT_LSB_IDX;  // turn on P10.2 (LED D13 BLUE)
         }
 
     }
@@ -329,9 +330,9 @@ void initCCU60(void)
     SRC_CCU6_CCU60_SR0.U |= 0x1 << SRE_BIT_LSB_IDX;     // SR0 enabled
 
     // T13 configurations
-    CCU60_TCTR0.B.T13CLK = 0x6;     // f_CCU6 = 1.562500 MHz,
+    CCU60_TCTR0.B.T13CLK = 0x6;     // f_CCU6 = 1.562500 MHz, 1562500 counters per sec
     CCU60_TCTR0.B.T13PRE = 0x0;     // prescaler disable
-    CCU60_T13PR.B.T13PV = 15625 - 1;
+    CCU60_T13PR.B.T13PV = 15625 - 1; // interrupt every 0.01s
     CCU60_TCTR4.B.T13STR = 0x1;
     CCU60_T13.B.T13CV = 0x0;
     CCU60_IEN.B.ENT13PM = 0x1;
