@@ -135,7 +135,7 @@
 #define SLEEP_THRESH_TIME_LEV1        5
 #define SLEEP_THRESH_TIME_LEV2        10
 #define SLEEP_THRESH_TIME_LEV3        15
-
+#define BUFF_SIZE 100
 IfxCpu_syncEvent g_cpuSyncEvent = 0;
 
 void initLED(void);
@@ -151,9 +151,12 @@ void usonicTrigger(void);
 void initCCU61(void);
 void initUSonic(void);
 void initBuzzer(void);
-
+unsigned int Range_LPF(int);
 
 unsigned int range;
+unsigned int range_avg = 0;
+unsigned int range_count = 0;
+unsigned int range_buff[BUFF_SIZE] = {0,};
 unsigned char range_valid_flag = 0;
 unsigned char sleep_flag = 0;
 unsigned int sleep_counter;
@@ -640,4 +643,28 @@ void usonicTrigger(void)
     P02_OUT.U |= 0x1 << P6_BIT_LSB_IDX;
     range_valid_flag = 0;
     CCU60_TCTR4.U = 0x1 << T12RS_BIT_LSB_IDX;           // T12 start counting
+}
+
+unsigned int Range_LPF(int range)
+{
+    if (range_count < BUFF_SIZE)
+    {
+        range_buff[range_count] = range;
+        range_count += 1;
+
+    }
+    if (range_count==BUFF_SIZE)
+    {
+        range_avg = 0;
+        for(unsigned int i = 0; i<(BUFF_SIZE-1); i++)
+        {
+            range_buff[i] = range_buff[i+1];
+            range_avg += range_buff[i];
+        }
+        range_buff[BUFF_SIZE-1] = range;
+        range_avg += range;
+        range_avg /= BUFF_SIZE;
+        range = range_avg;
+    }
+    return range;
 }
