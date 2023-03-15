@@ -219,9 +219,9 @@ int core0_main(void)
     initLED();
     initRGBLED();
     //initVADC();
-//    initBuzzer();
+    initBuzzer();
     initGTM();
-    //initButton();
+    initButton();
     initUSonic();
 
     GTM_TOM0_TGC0_GLB_CTRL.U |= 0x1 << HOST_TRIG_BIT_LSB_IDX;       // trigger update request signal
