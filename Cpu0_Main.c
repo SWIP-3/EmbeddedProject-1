@@ -239,10 +239,14 @@ void CCU60_T13_ISR(void) // 100 Hz
             if ( buzz_status_flag <= BUZZ_FREQ_THRESH_LEV1 ){
                 // buzz on
                 P02_IOCR0.B.PC3 = 0x11;
+                // light on
+                P10_OUT.U |= 0x1 << P1_BIT_LSB_IDX;
             }
             else{
                 // buzz off
                 P02_IOCR0.B.PC3 = 0x0;
+                // light off
+                P10_OUT.U &= ~(0x1 << P1_BIT_LSB_IDX);
             }
         }
         else if (sleep_level == 2){ // sleep level 2
@@ -250,14 +254,21 @@ void CCU60_T13_ISR(void) // 100 Hz
             if ( buzz_status_flag <= BUZZ_FREQ_THRESH_LEV2 ){
                 // buzz on
                 P02_IOCR0.B.PC3 = 0x11;
+                // light on
+                P10_OUT.U |= 0x1 << P1_BIT_LSB_IDX;
             }
             else{
                 // buzz off
                 P02_IOCR0.B.PC3 = 0x0;
+                // light off
+                P10_OUT.U &= ~(0x1 << P1_BIT_LSB_IDX);
             }
         }
         else if (sleep_level == 3){   // sleep level 3
+            // buzz on
             P02_IOCR0.B.PC3 = 0x11;
+            // light on
+            P10_OUT.U |= 0x1 << P1_BIT_LSB_IDX;
         }
     }
 }
@@ -544,7 +555,6 @@ void initGTM(void)
 
     while((GTM_CLC.U & (1 << DISS_BIT_LSB_IDX)) != 0); // wait until GTM module enabled
 
-
     // GTM clock configuration
     GTM_CMU_FXCLK_CTRL.U &= ~(0xF << FXCLK_SEL_BIT_LSB_IDX);  // input clock of CMU_FXCLK --> CMU_GCLK_EN
     GTM_CMU_CLK_EN.U |= 0x2 << EN_FXCLK_BIT_LSB_IDX;        // enable all CMU_FXCLK
@@ -567,7 +577,6 @@ void initGTM(void)
     GTM_TOM0_TGC0_OUTEN_CTRL.B.OUTEN_CTRL2 |= 0x2;   // enable channel 2 output on update trigger
     GTM_TOM0_TGC0_OUTEN_CTRL.B.OUTEN_CTRL3 |= 0x2;   // enable channel 3 output on update trigger
     GTM_TOM0_TGC1_OUTEN_CTRL.B.OUTEN_CTRL7 |= 0x2;   // enable channel 15 output on update trigger
-
 
     // TOM 0_1
     GTM_TOM0_CH1_CTRL.U |= 0x1 << SL_BIT_LSB_IDX;                   // high signal level for duty cycle
@@ -648,7 +657,6 @@ void usonicTrigger(void)
     range_valid_flag = 0;
     CCU60_TCTR4.U = 0x1 << T12RS_BIT_LSB_IDX;           // T12 start counting
 }
-
 
 unsigned int Range_LPF(int range)
 {
