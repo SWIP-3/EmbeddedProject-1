@@ -132,10 +132,13 @@
 #define COUNTER_PER_SEC             100     // # of counters per sec
 #define SLEEP_THRESH_TIME             5     // Sleep decision after n seconds
 #define SLEEP_THRESH_DIST            50
-#define SLEEP_THRESH_TIME_LEV1        5
-#define SLEEP_THRESH_TIME_LEV2        10
-#define SLEEP_THRESH_TIME_LEV3        15
-#define BUFF_SIZE 100
+#define SLEEP_THRESH_TIME_LEV1        500   // 5 sec
+#define SLEEP_THRESH_TIME_LEV2        1000  // 10 sec
+#define SLEEP_THRESH_TIME_LEV3        1500  // 15 sec
+#define BUZZ_FREQ_THRESH_LEV1        50   // 5 sec
+#define BUZZ_FREQ_THRESH_LEV2        25  // 10 sec
+#define BUZZ_FREQ_DIV_LEV1        100
+#define BUZZ_FREQ_DIV_LEV2        50
 IfxCpu_syncEvent g_cpuSyncEvent = 0;
 
 void initLED(void);
@@ -151,17 +154,16 @@ void usonicTrigger(void);
 void initCCU61(void);
 void initUSonic(void);
 void initBuzzer(void);
-unsigned int Range_LPF(int);
+
 
 unsigned int range;
-unsigned int range_avg = 0;
-unsigned int range_count = 0;
-unsigned int range_buff[BUFF_SIZE] = {0,};
 unsigned char range_valid_flag = 0;
 unsigned char sleep_flag = 0;
 unsigned int sleep_counter;
 unsigned char a, b, c;
 unsigned int T13_INTERRUPT_FREQ = (50000000/T13_CLK_FREQ_DIVIDER) / COUNTER_PER_SEC;
+unsigned int sleep_level = 0;
+unsigned int buzz_status_flag = 0;
 
 __interrupt(0x0A) __vector_table(0)
 void ERU0_ISR(void)
@@ -196,9 +198,9 @@ void ERU0_ISR(void)
         {
             sleep_flag = 0;
             sleep_counter = 0;
+            sleep_level = 0;
             P10_OUT.U &= ~(0x1 << P1_BIT_LSB_IDX); // Turn off LED
             P02_IOCR0.B.PC3 = 0x0;  // turn off buzzer
-
         }
     }
 }
@@ -217,6 +219,40 @@ void CCU60_T13_ISR(void) // 100 Hz
     if (sleep_flag == 1)
     {
         sleep_counter++; // 100 counters for 1 sec since interrupt happens every 0.01s
+
+        if (SLEEP_THRESH_TIME_LEV3 <= sleep_counter){
+            sleep_level = 3;
+        }else if (SLEEP_THRESH_TIME_LEV2 <= sleep_counter){
+            sleep_level = 2;
+        }else if (SLEEP_THRESH_TIME_LEV1 <= sleep_counter){
+            sleep_level = 1;
+        }
+
+        if (sleep_level == 1){  // sleep level 1
+            buzz_status_flag = sleep_counter % BUZZ_FREQ_DIV_LEV1;
+            if ( buzz_status_flag <= BUZZ_FREQ_THRESH_LEV1 ){
+                // buzz on
+                P02_IOCR0.B.PC3 = 0x11;
+            }
+            else{
+                // buzz off
+                P02_IOCR0.B.PC3 = 0x0;
+            }
+        }
+        else if (sleep_level == 2){ // sleep level 2
+            buzz_status_flag = sleep_counter % BUZZ_FREQ_DIV_LEV2;
+            if ( buzz_status_flag <= BUZZ_FREQ_THRESH_LEV2 ){
+                // buzz on
+                P02_IOCR0.B.PC3 = 0x11;
+            }
+            else{
+                // buzz off
+                P02_IOCR0.B.PC3 = 0x0;
+            }
+        }
+        else if (sleep_level == 3){   // sleep level 3
+            P02_IOCR0.B.PC3 = 0x11;
+        }
     }
 }
 
@@ -247,8 +283,6 @@ int core0_main(void)
     initButton();
     initUSonic();
 
-    unsigned int duty[8] = {130, 146, 164, 174, 195, 220, 246, 262};
-
     GTM_TOM0_TGC0_GLB_CTRL.U |= 0x1 << HOST_TRIG_BIT_LSB_IDX;       // trigger update request signal
     GTM_TOM0_TGC1_GLB_CTRL.U |= 0x1 << HOST_TRIG_BIT_LSB_IDX;       // trigger update request signal
 
@@ -262,42 +296,6 @@ int core0_main(void)
         {
             sleep_flag = 1;
         }
-
-        if (sleep_counter > COUNTER_PER_SEC*SLEEP_THRESH_TIME_LEV3) // sleep level 3
-        {
-            for(unsigned int i = 0; i < 50000000; i++);
-            GTM_TOM0_CH11_SR0.U = (6250000 / duty[2]) - 1;
-            GTM_TOM0_CH11_SR1.U = (3125000 / duty[2]) - 1;
-        }
-        else if (sleep_counter > COUNTER_PER_SEC*SLEEP_THRESH_TIME_LEV2)    // sleep level 2
-        {
-            for(unsigned int i = 0; i < 50000000; i++);
-            GTM_TOM0_CH11_SR0.U = (6250000 / duty[1]) - 1;
-            GTM_TOM0_CH11_SR1.U = (3125000 / duty[1]) - 1;
-        }
-        else if (sleep_counter > COUNTER_PER_SEC*SLEEP_THRESH_TIME_LEV1) // sleep level 1
-        {
-            P10_OUT.U |= 0x1 << P1_BIT_LSB_IDX;  // turn on P10.2 (LED D13 BLUE)
-            P02_IOCR0.B.PC3 = 0x11; // turn on buzzer
-            for(unsigned int i = 0; i < 50000000; i++);
-            GTM_TOM0_CH11_SR0.U = (6250000 / duty[0]) - 1;
-            GTM_TOM0_CH11_SR1.U = (3125000 / duty[0]) - 1;
-        }
-        else
-        {
-            for(unsigned int i = 0; i < 50000000; i++);
-            GTM_TOM0_CH11_SR0.U = (6250000 / duty[0]) - 1;
-            GTM_TOM0_CH11_SR1.U = (3125000 / duty[0]) - 1;
-            continue;
-        }
-        /*
-        if (sleep_counter > COUNTER_PER_SEC*SLEEP_THRESH_TIME)
-        {
-            P10_OUT.U |= 0x1 << P1_BIT_LSB_IDX;  // turn on P10.2 (LED D13 BLUE)
-            P02_IOCR0.B.PC3 = 0x11; // turn on buzzer
-        }
-        */
-
     }
     return (1);
 }
@@ -643,28 +641,4 @@ void usonicTrigger(void)
     P02_OUT.U |= 0x1 << P6_BIT_LSB_IDX;
     range_valid_flag = 0;
     CCU60_TCTR4.U = 0x1 << T12RS_BIT_LSB_IDX;           // T12 start counting
-}
-
-unsigned int Range_LPF(int range)
-{
-    if (range_count < BUFF_SIZE)
-    {
-        range_buff[range_count] = range;
-        range_count += 1;
-
-    }
-    if (range_count==BUFF_SIZE)
-    {
-        range_avg = 0;
-        for(unsigned int i = 0; i<(BUFF_SIZE-1); i++)
-        {
-            range_buff[i] = range_buff[i+1];
-            range_avg += range_buff[i];
-        }
-        range_buff[BUFF_SIZE-1] = range;
-        range_avg += range;
-        range_avg /= BUFF_SIZE;
-        range = range_avg;
-    }
-    return range;
 }
