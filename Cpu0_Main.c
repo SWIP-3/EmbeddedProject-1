@@ -132,6 +132,9 @@
 #define COUNTER_PER_SEC             100     // # of counters per sec
 #define SLEEP_THRESH_TIME             5     // Sleep decision after n seconds
 #define SLEEP_THRESH_DIST            50
+#define SLEEP_THRESH_TIME_LEV1        5
+#define SLEEP_THRESH_TIME_LEV2        10
+#define SLEEP_THRESH_TIME_LEV3        15
 
 IfxCpu_syncEvent g_cpuSyncEvent = 0;
 
@@ -241,6 +244,8 @@ int core0_main(void)
     initButton();
     initUSonic();
 
+    unsigned int duty[8] = {130, 146, 164, 174, 195, 220, 246, 262};
+
     GTM_TOM0_TGC0_GLB_CTRL.U |= 0x1 << HOST_TRIG_BIT_LSB_IDX;       // trigger update request signal
     GTM_TOM0_TGC1_GLB_CTRL.U |= 0x1 << HOST_TRIG_BIT_LSB_IDX;       // trigger update request signal
 
@@ -255,13 +260,40 @@ int core0_main(void)
             sleep_flag = 1;
         }
 
-
-
+        if (sleep_counter > COUNTER_PER_SEC*SLEEP_THRESH_TIME_LEV3) // sleep level 3
+        {
+            for(unsigned int i = 0; i < 50000000; i++);
+            GTM_TOM0_CH11_SR0.U = (6250000 / duty[2]) - 1;
+            GTM_TOM0_CH11_SR1.U = (3125000 / duty[2]) - 1;
+        }
+        else if (sleep_counter > COUNTER_PER_SEC*SLEEP_THRESH_TIME_LEV2)    // sleep level 2
+        {
+            for(unsigned int i = 0; i < 50000000; i++);
+            GTM_TOM0_CH11_SR0.U = (6250000 / duty[1]) - 1;
+            GTM_TOM0_CH11_SR1.U = (3125000 / duty[1]) - 1;
+        }
+        else if (sleep_counter > COUNTER_PER_SEC*SLEEP_THRESH_TIME_LEV1) // sleep level 1
+        {
+            P10_OUT.U |= 0x1 << P1_BIT_LSB_IDX;  // turn on P10.2 (LED D13 BLUE)
+            P02_IOCR0.B.PC3 = 0x11; // turn on buzzer
+            for(unsigned int i = 0; i < 50000000; i++);
+            GTM_TOM0_CH11_SR0.U = (6250000 / duty[0]) - 1;
+            GTM_TOM0_CH11_SR1.U = (3125000 / duty[0]) - 1;
+        }
+        else
+        {
+            for(unsigned int i = 0; i < 50000000; i++);
+            GTM_TOM0_CH11_SR0.U = (6250000 / duty[0]) - 1;
+            GTM_TOM0_CH11_SR1.U = (3125000 / duty[0]) - 1;
+            continue;
+        }
+        /*
         if (sleep_counter > COUNTER_PER_SEC*SLEEP_THRESH_TIME)
         {
             P10_OUT.U |= 0x1 << P1_BIT_LSB_IDX;  // turn on P10.2 (LED D13 BLUE)
             P02_IOCR0.B.PC3 = 0x11; // turn on buzzer
         }
+        */
 
     }
     return (1);
@@ -279,7 +311,6 @@ void initLED(void)
 void initButton(void)
 {
     P02_IOCR0.U &= ~(0x1F << PC1_BIT_LSB_IDX);       // reset P02_IOCR0 PC1
-
     P02_IOCR0.U |= 0x02 << PC1_BIT_LSB_IDX;          // set P02.1 general input (pull-up connected)
 }
 
@@ -290,11 +321,9 @@ void initERU(void)
 
     SCU_EICR1.U |= (0x2  << EXIS0_BIT_LSB_IDX);     // ERS2 - Input 2
 
-
     SCU_EICR1.U |= 0x1   << FEN0_BIT_LSB_IDX;       // falling edge
 
     SCU_EICR1.U |= 0x1   << REN0_BIT_LSB_IDX;       // rising edge
-
 
     SCU_EICR1.U |= 0x1   << EIEN0_BIT_LSB_IDX;
 
@@ -335,24 +364,18 @@ void initCCU60(void)
     // CCU60 T12 configurations
     while((CCU60_CLC.U & (1 << DISS_BIT_LSB_IDX)) != 0);// wait until CCU60 module enabled
 
-
     CCU60_TCTR0.U &= ~(0x7 << T12CLK_BIT_LSB_IDX);      // f_T12 = f_CCU6 / prescaler
     CCU60_TCTR0.U |= 0x2 << T12CLK_BIT_LSB_IDX;         // f_CCU6 = 50 MHz, prescaler = 4
     //CCU60_TCTR0.U |= 0x1 << T12PRE_BIT_LSB_IDX;         // f_T12 --> 12.5 MHz
 
-
     CCU60_TCTR0.U &= ~(0x1 << CTM_BIT_LSB_IDX);         // T12 auto reset when period match (PM) occur
-
 
     CCU60_T12PR.U = 125 -1;                       // PM interrupt freq. = f_T12 / (T12PR + 1)
     CCU60_TCTR4.U |= 0x1 << T12STR_BIT_LSB_IDX;         // load T12PR from shadow register
 
-
     CCU60_TCTR2.B.T12SSC = 0x1;                     // Single Shot Control
 
-
     CCU60_T12.U = 0;                                // clear T12 counter register
-
 
     // CCU60 T12 PM interrupt setting
     CCU60_INP.U &= ~(0x3 << INPT12_BIT_LSB_IDX);        // service request output SR0 selected
@@ -573,22 +596,16 @@ void initGTM(void)
     GTM_TOM0_CH15_SR0.U = 12500 - 1;                                // PWM freq. = 6250 kHz / 12500 = 250 kHz
     //GTM_TOM0_CH15_SR1.U = 125 - 1;                                // duty cycle = 6250 / 12500 = 50 %
 
-
     // TOUT pin selection
     GTM_TOUTSEL6.U &= ~(0x3 << SEL7_BIT_LSB_IDX);                   // TOUT103  --> TOM0 channel 1
     GTM_TOUTSEL0.U &= ~(0x3 << SEL7_BIT_LSB_IDX);                   // TOUT7    --> TOM0 channel 15
     GTM_TOUTSEL6.U &= ~(0x3 << SEL11_BIT_LSB_IDX);                  // TOUT103  --> TOM0 channel 2
     GTM_TOUTSEL6.U &= ~(0x3 << SEL9_BIT_LSB_IDX);                   // TOUT105  --> TOM0 channel 3
 
-
-
-
-
     // set GTM TOM0 channel 11 - Buzzer
     GTM_TOM0_TGC1_GLB_CTRL.B.UPEN_CTRL3     |= 0x2;                   // TOM0 channel 11 enable
     GTM_TOM0_TGC1_ENDIS_CTRL.B.ENDIS_CTRL3  |= 0x2;                   // enable channel 11 on update trigger
     GTM_TOM0_TGC1_OUTEN_CTRL.B.OUTEN_CTRL3  |= 0x2;                   // enable channel 11 output on update trigger
-
 
     // TOM 0_11
     GTM_TOM0_CH11_CTRL.B.SL = 0x1;                                  // high signal level for duty cycle
