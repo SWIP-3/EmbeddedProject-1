@@ -316,13 +316,6 @@ int core0_main(void)
             sleep_flag = 1;
         }
 
-
-        if (sleep_counter > COUNTER_PER_SEC*SLEEP_THRESH_TIME)
-        {
-            P10_OUT.U |= 0x1 << P1_BIT_LSB_IDX;  // turn on P10.2 (LED D13 BLUE)
-            P02_IOCR0.B.PC3 = 0x11; // turn on buzzer
-        }
-
     }
     return (1);
 }
@@ -692,9 +685,9 @@ void initBuzzer(void)
 void initUSonic(void)
 {
     P02_IOCR4.U &= ~(0x1F << PC6_BIT_LSB_IDX);       // reset P02_IOCR4 PC6
-    P14_IOCR0.U &= ~(0x1F << 11);       // reset P00_IOCR4 PC4
+    P14_IOCR0.U &= ~(0x1F << PC1_BIT_LSB_IDX);       // reset P14_IOCR0 PC1
 
-    P14_IOCR0.U |= 0x01 << 11;        // set P00.4 general input (pull-down connected) [Echo]
+    P14_IOCR0.U |= 0x01 << PC1_BIT_LSB_IDX;        // set P14.1 general input (pull-down connected) [Echo]
     P02_IOCR4.U |= 0x10 << PC6_BIT_LSB_IDX;        // set P02.6 push-pull general output            [Trig]
 
     P02_OUT.U &= ~(0x1 << P6_BIT_LSB_IDX);
