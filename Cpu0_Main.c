@@ -44,6 +44,7 @@
 #define PC5_BIT_LSB_IDX             11
 #define PC6_BIT_LSB_IDX             19
 #define PC7_BIT_LSB_IDX             27
+#define PC0_BIT_LSB_IDX             3
 #define P1_BIT_LSB_IDX              1
 #define P2_BIT_LSB_IDX              2
 #define P3_BIT_LSB_IDX              3
@@ -51,6 +52,13 @@
 #define P5_BIT_LSB_IDX              5
 #define P6_BIT_LSB_IDX              6
 #define P7_BIT_LSB_IDX              7
+
+// Extra
+#define PC8_BIT_LSB_IDX             3
+#define PC9_BIT_LSB_IDX             11
+#define PC10_BIT_LSB_IDX            19
+#define PC11_BIT_LSB_IDX            27
+#define PC12_BIT_LSB_IDX            3
 
 // SCU registers
 #define LCK_BIT_LSB_IDX             1
@@ -145,6 +153,7 @@ void initERU3(void);
 void initCCU60(void);
 void initRGBLED(void);
 void initVADC(void);
+void initOutputCommunicate(void);
 void VADC_startConversion(void);
 unsigned int VADC_readResult(void);
 void initGTM(void);
@@ -153,6 +162,7 @@ void initCCU61(void);
 void initUSonic(void);
 void initBuzzer(void);
 unsigned int Range_LPF(int);
+void sendGPIOSignal(void);
 
 unsigned int range;
 unsigned int range_avg = 0;
@@ -250,6 +260,7 @@ void CCU60_T13_ISR(void) // 100 Hz
             P02_IOCR0.B.PC3 = 0x11;
             // light on
             P10_OUT.U |= 0x1 << P1_BIT_LSB_IDX;
+            P14_OUT.U |= 0x1 << PC0_BIT_LSB_IDX;
         }
 
     }
@@ -273,8 +284,6 @@ void ERU2_ISR(void) // 100 Hz
         }
     }
 }
-
-
 
 int core0_main(void)
 {
@@ -301,6 +310,7 @@ int core0_main(void)
     initGTM();
     initButton();
     initUSonic();
+    initOutputCommunicate();
 
     GTM_TOM0_TGC0_GLB_CTRL.U |= 0x1 << HOST_TRIG_BIT_LSB_IDX;       // trigger update request signal
     GTM_TOM0_TGC1_GLB_CTRL.U |= 0x1 << HOST_TRIG_BIT_LSB_IDX;       // trigger update request signal
@@ -731,4 +741,67 @@ unsigned int Range_LPF(int range)
         range = range_avg;
     }
     return range;
+}
+
+void initInputCommunicate(void)
+{
+    P14_IOCR0.U &= ~(0x1F << PC0_BIT_LSB_IDX);      // reset PIN24 - P15 6
+    P15_IOCR4.U &= ~(0x1F << PC6_BIT_LSB_IDX);      // reset PIN24 - P15 6
+    P00_IOCR8.U &= ~(0x1F << PC8_BIT_LSB_IDX);      // reset PIN26 - P00 8
+    P00_IOCR8.U &= ~(0x1F << PC9_BIT_LSB_IDX);      // reset PIN28 - P00 9
+    P00_IOCR8.U &= ~(0x1F << PC10_BIT_LSB_IDX);     // reset PIN30 - P00 10
+    P00_IOCR8.U &= ~(0x1F << PC11_BIT_LSB_IDX);     // reset PIN32 - P00 10
+    P00_IOCR12.U &= ~(0x1F << PC12_BIT_LSB_IDX);        // reset PIN34 - P00 10
+    P33_IOCR0.U &= ~(0x1F << PC2_BIT_LSB_IDX);      // reset PIN36 - P00 10
+    P33_IOCR0.U &= ~(0x1F << PC1_BIT_LSB_IDX);      // reset PIN38 - P00 10
+    P33_IOCR0.U &= ~(0x1F << PC0_BIT_LSB_IDX);      // reset PIN40 - P00 10
+
+    P14_IOCR0.U |= (0x00 << PC0_BIT_LSB_IDX);       // set PIN24 - P15 6 IN
+    P15_IOCR4.U |= (0x00 << PC6_BIT_LSB_IDX);       // reset PIN24 - P15 6 IN
+    P00_IOCR8.U |= (0x00 << PC8_BIT_LSB_IDX);       // reset PIN26 - P00 8 IN
+    P00_IOCR8.U |= (0x00 << PC9_BIT_LSB_IDX);       // reset PIN28 - P00 9 IN
+    P00_IOCR8.U |= (0x00 << PC10_BIT_LSB_IDX);      // reset PIN30 - P00 10 IN
+    P00_IOCR8.U |= (0x00 << PC11_BIT_LSB_IDX);      // reset PIN32 - P00 10 IN
+    P00_IOCR12.U |= (0x00 << PC12_BIT_LSB_IDX);     // reset PIN34 - P00 10 IN
+    P33_IOCR0.U |= (0x00 << PC2_BIT_LSB_IDX);       // reset PIN36 - P00 10 IN
+    P33_IOCR0.U |= (0x00 << PC1_BIT_LSB_IDX);       // reset PIN38 - P00 10 IN
+    P33_IOCR0.U |= (0x00 << PC0_BIT_LSB_IDX);       // reset PIN40 - P00 10 IN
+}
+
+void initOutputCommunicate(void)
+{
+    P14_IOCR0.U &= ~(0x1F  << PC0_BIT_LSB_IDX);     // reset PIN24 - P15 6
+    P15_IOCR4.U &= ~(0x1F  << PC6_BIT_LSB_IDX);     // reset PIN24 - P15 6
+    P00_IOCR8.U &= ~(0x1F << PC8_BIT_LSB_IDX);     // reset PIN26 - P00 8
+    P00_IOCR8.U &= ~(0x1F << PC9_BIT_LSB_IDX);     // reset PIN28 - P00 9
+    P00_IOCR8.U &= ~(0x1F << PC10_BIT_LSB_IDX);     // reset PIN30 - P00 10
+    P00_IOCR8.U &= ~(0x1F << PC11_BIT_LSB_IDX);// reset PIN32 - P00 10
+    P00_IOCR12.U &= ~(0x1F << PC12_BIT_LSB_IDX);// reset PIN34 - P00 10
+    P33_IOCR0.U &= ~(0x1F << PC2_BIT_LSB_IDX);// reset PIN36 - P00 10
+    P33_IOCR0.U &= ~(0x1F << PC1_BIT_LSB_IDX);// reset PIN38 - P00 10
+    P33_IOCR0.U &= ~(0x1F << PC0_BIT_LSB_IDX);// reset PIN40 - P00 10
+
+    P14_IOCR0.U |= (0x10 << PC0_BIT_LSB_IDX);     // set PIN24 - P15 6 IN
+    P15_IOCR4.U |= (0x10 << PC6_BIT_LSB_IDX);     // reset PIN24 - P15 6 IN
+    P00_IOCR8.U |= (0x10 << PC8_BIT_LSB_IDX);     // reset PIN26 - P00 8 IN
+    P00_IOCR8.U |= (0x10 << PC9_BIT_LSB_IDX);     // reset PIN28 - P00 9 IN
+    P00_IOCR8.U |= (0x10 << PC10_BIT_LSB_IDX);     // reset PIN30 - P00 10 IN
+    P00_IOCR8.U |= (0x10 << PC11_BIT_LSB_IDX);// reset PIN32 - P00 10 IN
+    P00_IOCR12.U |= (0x10 << PC12_BIT_LSB_IDX);// reset PIN34 - P00 10 IN
+    P33_IOCR0.U |= (0x10 << PC2_BIT_LSB_IDX);// reset PIN36 - P00 10 IN
+    P33_IOCR0.U |= (0x10 << PC1_BIT_LSB_IDX);// reset PIN38 - P00 10 IN
+    P33_IOCR0.U |= (0x10 << PC0_BIT_LSB_IDX);// reset PIN40 - P00 10 IN
+}
+
+void sendGPIOSignal(void)
+{
+        // send GPIO signal
+        P10_OUT.U |= signal[0] << PC1_BIT_LSB_IDX;
+        P14_OUT.U |= (signal[1]  << PC0_BIT_LSB_IDX);     // reset PIN24 - P15 6
+        P15_OUT.U |= (signal[2]  << PC6_BIT_LSB_IDX);     // reset PIN24 - P15 6
+        P00_OUT.U |= (signal[3] << PC8_BIT_LSB_IDX);     // reset PIN26 - P00 8
+        P00_OUT.U |= (signal[4] << PC9_BIT_LSB_IDX);     // reset PIN28 - P00 9
+        P00_OUT.U |= (signal[5] << PC10_BIT_LSB_IDX);     // reset PIN30 - P00 10
+        P00_OUT.U |= (signal[6] << PC11_BIT_LSB_IDX);// reset PIN32 - P00 10
+        P00_OUT.U |= (signal[7] << PC12_BIT_LSB_IDX);// reset PIN34 - P00 10
 }
