@@ -32,6 +32,8 @@
 #include "IfxVadc_reg.h"
 #include "IfxGtm_reg.h"
 
+#include <stdio.h>
+
 IfxCpu_syncEvent g_cpuSyncEvent = 0;
 
 // Port registers
@@ -43,6 +45,7 @@ IfxCpu_syncEvent g_cpuSyncEvent = 0;
 #define PC6_BIT_LSB_IDX             19
 #define PC7_BIT_LSB_IDX             27
 #define PC0_BIT_LSB_IDX             3
+#define P0_BIT_LSB_IDX              0
 #define P1_BIT_LSB_IDX              1
 #define P2_BIT_LSB_IDX              2
 #define P3_BIT_LSB_IDX              3
@@ -50,7 +53,11 @@ IfxCpu_syncEvent g_cpuSyncEvent = 0;
 #define P5_BIT_LSB_IDX              5
 #define P6_BIT_LSB_IDX              6
 #define P7_BIT_LSB_IDX              7
-
+#define P8_BIT_LSB_IDX              8
+#define P9_BIT_LSB_IDX              9
+#define P10_BIT_LSB_IDX              10
+#define P11_BIT_LSB_IDX              11
+#define P12_BIT_LSB_IDX              12
 // Extra
 #define PC8_BIT_LSB_IDX             3
 #define PC9_BIT_LSB_IDX             11
@@ -128,17 +135,6 @@ void receiveGPIOSignal(void);
 void initInputCommunicate(void);
 unsigned int arr[8] = {0, };
 unsigned int a = 0;
-//__interrupt(0x0A) __vector_table(0)
-//void ERU0_ISR(void)
-//{
-//    P10_OUT.U ^= 0x1 << P1_BIT_LSB_IDX;
-//}
-
-//__interrupt(0x0B) __vector_table(0)
-//void CCU60_T12_ISR(void)
-//{
-//    P10_OUT.U ^= 0x1 << P2_BIT_LSB_IDX;
-//}
 
 int core0_main(void)
 {
@@ -168,18 +164,15 @@ int core0_main(void)
 
     while(1)
     {
+        receiveGPIOSignal();
 
-        duty = 12500;
-
-        P10_OUT.U |= 0x1 << P1_BIT_LSB_IDX;
-        P02_OUT.U |= 0x1 << P1_BIT_LSB_IDX;
-        P02_OUT.U &= ~(0x1 << P7_BIT_LSB_IDX);
-
-
-        a = P14_IN.U & (0x1 << PC0_BIT_LSB_IDX); // check button status, default 1
-        if (a==0)
+        if (arr[2]!=0)  // signal detected - sleep level 3
         {
             duty = 0;
+        }
+        else
+        {
+            duty = 2500;
         }
         GTM_TOM0_CH9_SR1.U = duty;
     }
@@ -316,12 +309,11 @@ void initInputCommunicate(void)
 
 void receiveGPIOSignal(void)
 {
-        arr[0] = P10_IN.U & (0x1 << PC1_BIT_LSB_IDX);
-        arr[1] = P14_IN.U & (0x1 << PC0_BIT_LSB_IDX);
-        arr[2] = P15_IN.U & (0x1 << PC6_BIT_LSB_IDX);
-        arr[3] = P00_IN.U & (0x1 << PC8_BIT_LSB_IDX);
-        arr[4] = P00_IN.U & (0x1 << PC9_BIT_LSB_IDX);
-        arr[5] = P00_IN.U & (0x1 << PC10_BIT_LSB_IDX);
-        arr[6] = P00_IN.U & (0x1 << PC11_BIT_LSB_IDX);
-        arr[7] = P00_IN.U & (0x1 << PC12_BIT_LSB_IDX);
+        arr[0] = P14_IN.U & (0x1 << P0_BIT_LSB_IDX);
+        arr[1] = P15_IN.U & (0x1 << P6_BIT_LSB_IDX); // check needed
+        arr[2] = P00_IN.U & (0x1 << P8_BIT_LSB_IDX);
+        arr[3] = P00_IN.U & (0x1 << P9_BIT_LSB_IDX);
+        arr[4] = P00_IN.U & (0x1 << P10_BIT_LSB_IDX);
+        arr[5] = P00_IN.U & (0x1 << P11_BIT_LSB_IDX);
+        arr[6] = P00_IN.U & (0x1 << P12_BIT_LSB_IDX);
 }

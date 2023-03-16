@@ -32,6 +32,8 @@
 #include "IfxVadc_reg.h"
 #include "IfxGtm_reg.h"
 
+#include <stdio.h>
+
 // jskwon
 // for debug
 //#include <stdio.h>
@@ -52,6 +54,7 @@
 #define P5_BIT_LSB_IDX              5
 #define P6_BIT_LSB_IDX              6
 #define P7_BIT_LSB_IDX              7
+#define P8_BIT_LSB_IDX              8
 
 // Extra
 #define PC8_BIT_LSB_IDX             3
@@ -182,19 +185,11 @@ void ERU3_ISR(void)
 {
     if( (P14_IN.U & (0x1 << P1_BIT_LSB_IDX)) != 0 )     // rising edge of echo
     {
-        //                    _________
-        //        echo ______|
-        //                   ^
         CCU61_TCTR4.U = 0x1 << T12RS_BIT_LSB_IDX;       // start CCU61 T12 counter
     }
     else                                            // falling edge of echo
     {
-        //             ______
-        //        echo       |______
-        //                   ^
-
         CCU61_TCTR4.B.T12RR = 0x1;       // stop CCU61 T12 counter
-
         // (1 / t_freq) * counter * 1000000 / 58  =  centimeter
         range = ((CCU61_T12.B.T12CV * 1000000) / 48828) / 58;
         range = Range_LPF(range);
@@ -230,42 +225,31 @@ void CCU60_T13_ISR(void) // 100 Hz
         if (sleep_level == 1){  // sleep level 1
             buzz_status_flag = sleep_counter % BUZZ_FREQ_DIV_LEV1;
             if ( buzz_status_flag <= BUZZ_FREQ_THRESH_LEV1 ){
-                // buzz on
-                P02_IOCR0.B.PC3 = 0x11;
-                // light on
-                P10_OUT.U |= 0x1 << P1_BIT_LSB_IDX;
+                P02_IOCR0.B.PC3 = 0x11; // buzz on
+                P10_OUT.U |= 0x1 << P1_BIT_LSB_IDX; // light on
             }
             else{
-                // buzz off
-                P02_IOCR0.B.PC3 = 0x0;
-                // light off
-                P10_OUT.U &= ~(0x1 << P1_BIT_LSB_IDX);
+                P02_IOCR0.B.PC3 = 0x0;  // buzz off
+                P10_OUT.U &= ~(0x1 << P1_BIT_LSB_IDX);  // light off
             }
         }
         else if (sleep_level == 2){ // sleep level 2
             buzz_status_flag = sleep_counter % BUZZ_FREQ_DIV_LEV2;
             if ( buzz_status_flag <= BUZZ_FREQ_THRESH_LEV2 ){
-                // buzz on
-                P02_IOCR0.B.PC3 = 0x11;
-                // light on
-                P10_OUT.U |= 0x1 << P1_BIT_LSB_IDX;
+                P02_IOCR0.B.PC3 = 0x11; // buzz on
+                P10_OUT.U |= 0x1 << P1_BIT_LSB_IDX; // light on
             }
             else{
-                // buzz off
-                P02_IOCR0.B.PC3 = 0x0;
-                // light off
-                P10_OUT.U &= ~(0x1 << P1_BIT_LSB_IDX);
+                P02_IOCR0.B.PC3 = 0x0;  // buzz off
+                P10_OUT.U &= ~(0x1 << P1_BIT_LSB_IDX);  // light off
             }
         }
         else if (sleep_level == 3){   // sleep level 3
-            P02_IOCR0.B.PC3 = 0x11;
-            // light on (RED)
-            P10_OUT.U |= 0x1 << P1_BIT_LSB_IDX;
-            // light on (BLUE)
-            P10_OUT.U |= 0x1 << P2_BIT_LSB_IDX;
-            P14_OUT.U |= 0x0 << PC0_BIT_LSB_IDX;
+            P02_IOCR0.B.PC3 = 0x11; // buzz on
+            P10_OUT.U |= 0x1 << P1_BIT_LSB_IDX; // light on (RED)
+            P10_OUT.U |= 0x1 << P2_BIT_LSB_IDX; // light on (BLUE)
+            P00_OUT.U |= (0x1 << P8_BIT_LSB_IDX);   // Send signal to receiver board
         }
-
     }
 }
 
@@ -321,7 +305,6 @@ int core0_main(void)
 
     while(1)
     {
-        for(unsigned int i = 0; i < 100000000; i++);
         usonicTrigger();
         while( range_valid_flag == 0);
 
@@ -329,7 +312,6 @@ int core0_main(void)
         {
             sleep_flag = 1;
         }
-
     }
     return (1);
 }
@@ -346,7 +328,6 @@ void initLED(void)
 void initButton(void)
 {
     P02_IOCR0.U &= ~(0x1F << PC1_BIT_LSB_IDX);       // reset P02_IOCR0 PC1
-
     P02_IOCR0.U |= 0x02 << PC1_BIT_LSB_IDX;          // set P02.1 general input (pull-up connected)
 }
 
@@ -425,29 +406,22 @@ void initCCU60(void)
     // CCU60 T12 configurations
     while((CCU60_CLC.U & (1 << DISS_BIT_LSB_IDX)) != 0);// wait until CCU60 module enabled
 
-
     CCU60_TCTR0.U &= ~(0x7 << T12CLK_BIT_LSB_IDX);      // f_T12 = f_CCU6 / prescaler
     CCU60_TCTR0.U |= 0x2 << T12CLK_BIT_LSB_IDX;         // f_CCU6 = 50 MHz, prescaler = 4
     //CCU60_TCTR0.U |= 0x1 << T12PRE_BIT_LSB_IDX;         // f_T12 --> 12.5 MHz
 
-
     CCU60_TCTR0.U &= ~(0x1 << CTM_BIT_LSB_IDX);         // T12 auto reset when period match (PM) occur
-
 
     CCU60_T12PR.U = 125 -1;                       // PM interrupt freq. = f_T12 / (T12PR + 1)
     CCU60_TCTR4.U |= 0x1 << T12STR_BIT_LSB_IDX;         // load T12PR from shadow register
 
-
     CCU60_TCTR2.B.T12SSC = 0x1;                     // Single Shot Control
 
-
     CCU60_T12.U = 0;                                // clear T12 counter register
-
 
     // CCU60 T12 PM interrupt setting
     CCU60_INP.U &= ~(0x3 << INPT12_BIT_LSB_IDX);        // service request output SR0 selected
     CCU60_IEN.U |= 0x1 << ENT12PM_BIT_LSB_IDX;          // enable T12 PM interrupt
-
 
     // SRC setting for CCU60
     SRC_CCU6_CCU60_SR0.U &= ~(0xFF << SRPN_BIT_LSB_IDX);
@@ -494,13 +468,10 @@ void initCCU61(void)
     // CCU60 T12 configurations
     while((CCU61_CLC.U & (1 << DISS_BIT_LSB_IDX)) != 0);// wait until CCU60 module enabled
 
-
     CCU61_TCTR0.U &= ~(0x7 << T12CLK_BIT_LSB_IDX);      // f_T12 = f_CCU6 / prescaler = 12.5 MHz
-//    CCU61_TCTR0.U |= 0x7 << T12CLK_BIT_LSB_IDX;         // f_CCU6 = 50 MHz, prescaler = 128
     CCU61_TCTR0.U |= 0x2 << T12CLK_BIT_LSB_IDX;         // f_CCU6 = 50 MHz, prescaler = 4
 
     CCU61_TCTR0.U |= 0x1 << T12PRE_BIT_LSB_IDX;         // f_T12 = f_CCU6 / 256 = 48,828 Hz
-
 
     CCU61_T12PR.U = 100000 -1;                       // PM interrupt freq. = f_T12 / (T12PR + 1)
     CCU61_TCTR4.U |= 0x1 << T12STR_BIT_LSB_IDX;         // load T12PR from shadow register
@@ -541,7 +512,6 @@ void initVADC(void)
     SCU_WDTCPU0_CON0.U = ((SCU_WDTCPU0_CON0.U ^ 0xFC) | (1 << LCK_BIT_LSB_IDX)) | (1 << ENDINIT_BIT_LSB_IDX);
     while((SCU_WDTCPU0_CON0.U & (1 << LCK_BIT_LSB_IDX)) == 0);
 
-
     // VADC configurations
     while((VADC_CLC.U & (1 << DISS_BIT_LSB_IDX)) != 0); // wait until VADC module enabled
 
@@ -556,7 +526,6 @@ void initVADC(void)
     VADC_G4_ARBCFG.U |= 0x3 << ANONC_BIT_LSB_IDX;       // ADC normal operation
 
     VADC_G4_ICLASS0.U &= ~(0x7 << CMS_BIT_LSB_IDX);     // Class 0 Standard Conversion (12-bit)
-
 
     // VADC Group 4 Channel 7 configuration
     VADC_G4_CHCTR7.U |= 0x1 << RESPOS_BIT_LSB_IDX;      // result right-aligned
@@ -605,7 +574,6 @@ void initGTM(void)
 
     while((GTM_CLC.U & (1 << DISS_BIT_LSB_IDX)) != 0); // wait until GTM module enabled
 
-
     // GTM clock configuration
     GTM_CMU_FXCLK_CTRL.U &= ~(0xF << FXCLK_SEL_BIT_LSB_IDX);  // input clock of CMU_FXCLK --> CMU_GCLK_EN
     GTM_CMU_CLK_EN.U |= 0x2 << EN_FXCLK_BIT_LSB_IDX;        // enable all CMU_FXCLK
@@ -614,7 +582,6 @@ void initGTM(void)
     GTM_TOM0_TGC0_GLB_CTRL.U |= 0x2 << UPEN_CTRL1_BIT_LSB_IDX;  // TOM channel 1 enable
     GTM_TOM0_TGC0_ENDIS_CTRL.U |= 0x2 << ENDIS_CTRL1_BIT_LSB_IDX;   // enable channel 1 on update trigger
     GTM_TOM0_TGC0_OUTEN_CTRL.U |= 0x2 << OUTEN_CTRL1_BIT_LSB_IDX;   // enable channel 1 output on update trigger
-
 
     // set TGC0 to enable GTM TOM0 channel 2, 3, 15
     GTM_TOM0_TGC0_GLB_CTRL.B.UPEN_CTRL2 |= 0x2;  // TOM0 channel 2 enable
@@ -628,7 +595,6 @@ void initGTM(void)
     GTM_TOM0_TGC0_OUTEN_CTRL.B.OUTEN_CTRL2 |= 0x2;   // enable channel 2 output on update trigger
     GTM_TOM0_TGC0_OUTEN_CTRL.B.OUTEN_CTRL3 |= 0x2;   // enable channel 3 output on update trigger
     GTM_TOM0_TGC1_OUTEN_CTRL.B.OUTEN_CTRL7 |= 0x2;   // enable channel 15 output on update trigger
-
 
     // TOM 0_1
     GTM_TOM0_CH1_CTRL.U |= 0x1 << SL_BIT_LSB_IDX;                   // high signal level for duty cycle
@@ -664,22 +630,16 @@ void initGTM(void)
     GTM_TOM0_CH15_SR0.U = 12500 - 1;                                // PWM freq. = 6250 kHz / 12500 = 250 kHz
     //GTM_TOM0_CH15_SR1.U = 125 - 1;                                // duty cycle = 6250 / 12500 = 50 %
 
-
     // TOUT pin selection
     GTM_TOUTSEL6.U &= ~(0x3 << SEL7_BIT_LSB_IDX);                   // TOUT103  --> TOM0 channel 1
     GTM_TOUTSEL0.U &= ~(0x3 << SEL7_BIT_LSB_IDX);                   // TOUT7    --> TOM0 channel 15
     GTM_TOUTSEL6.U &= ~(0x3 << SEL11_BIT_LSB_IDX);                  // TOUT103  --> TOM0 channel 2
     GTM_TOUTSEL6.U &= ~(0x3 << SEL9_BIT_LSB_IDX);                   // TOUT105  --> TOM0 channel 3
 
-
-
-
-
     // set GTM TOM0 channel 11 - Buzzer
     GTM_TOM0_TGC1_GLB_CTRL.B.UPEN_CTRL3     |= 0x2;                   // TOM0 channel 11 enable
     GTM_TOM0_TGC1_ENDIS_CTRL.B.ENDIS_CTRL3  |= 0x2;                   // enable channel 11 on update trigger
     GTM_TOM0_TGC1_OUTEN_CTRL.B.OUTEN_CTRL3  |= 0x2;                   // enable channel 11 output on update trigger
-
 
     // TOM 0_11
     GTM_TOM0_CH11_CTRL.B.SL = 0x1;                                  // high signal level for duty cycle
@@ -699,9 +659,9 @@ void initBuzzer(void)
 void initUSonic(void)
 {
     P02_IOCR4.U &= ~(0x1F << PC6_BIT_LSB_IDX);       // reset P02_IOCR4 PC6
-    P14_IOCR0.U &= ~(0x1F << PC1_BIT_LSB_IDX);       // reset P14_IOCR0 PC1
+    P14_IOCR0.U &= ~(0x1F << 11);       // reset P00_IOCR4 PC4
 
-    P14_IOCR0.U |= 0x01 << PC1_BIT_LSB_IDX;        // set P14.1 general input (pull-down connected) [Echo]
+    P14_IOCR0.U |= 0x01 << 11;        // set P00.4 general input (pull-down connected) [Echo]
     P02_IOCR4.U |= 0x10 << PC6_BIT_LSB_IDX;        // set P02.6 push-pull general output            [Trig]
 
     P02_OUT.U &= ~(0x1 << P6_BIT_LSB_IDX);
@@ -744,36 +704,36 @@ void initOutputCommunicate(void)
 {
     P14_IOCR0.U &= ~(0x1F  << PC0_BIT_LSB_IDX);     // reset PIN24 - P15 6
     P15_IOCR4.U &= ~(0x1F  << PC6_BIT_LSB_IDX);     // reset PIN24 - P15 6
-    P00_IOCR8.U &= ~(0x1F << PC8_BIT_LSB_IDX);     // reset PIN26 - P00 8
-    P00_IOCR8.U &= ~(0x1F << PC9_BIT_LSB_IDX);     // reset PIN28 - P00 9
+    P00_IOCR8.U &= ~(0x1F << PC8_BIT_LSB_IDX);      // reset PIN26 - P00 8
+    P00_IOCR8.U &= ~(0x1F << PC9_BIT_LSB_IDX);      // reset PIN28 - P00 9
     P00_IOCR8.U &= ~(0x1F << PC10_BIT_LSB_IDX);     // reset PIN30 - P00 10
-    P00_IOCR8.U &= ~(0x1F << PC11_BIT_LSB_IDX);// reset PIN32 - P00 10
-    P00_IOCR12.U &= ~(0x1F << PC12_BIT_LSB_IDX);// reset PIN34 - P00 10
-    P33_IOCR0.U &= ~(0x1F << PC2_BIT_LSB_IDX);// reset PIN36 - P00 10
-    P33_IOCR0.U &= ~(0x1F << PC1_BIT_LSB_IDX);// reset PIN38 - P00 10
-    P33_IOCR0.U &= ~(0x1F << PC0_BIT_LSB_IDX);// reset PIN40 - P00 10
+    P00_IOCR8.U &= ~(0x1F << PC11_BIT_LSB_IDX);     // reset PIN32 - P00 10
+    P00_IOCR12.U &= ~(0x1F << PC12_BIT_LSB_IDX);    // reset PIN34 - P00 10
+    P33_IOCR0.U &= ~(0x1F << PC2_BIT_LSB_IDX);      // reset PIN36 - P00 10
+    P33_IOCR0.U &= ~(0x1F << PC1_BIT_LSB_IDX);      // reset PIN38 - P00 10
+    P33_IOCR0.U &= ~(0x1F << PC0_BIT_LSB_IDX);      // reset PIN40 - P00 10
 
-    P14_IOCR0.U |= (0x10 << PC0_BIT_LSB_IDX);     // set PIN24 - P15 6 IN
-    P15_IOCR4.U |= (0x10 << PC6_BIT_LSB_IDX);     // reset PIN24 - P15 6 IN
-    P00_IOCR8.U |= (0x10 << PC8_BIT_LSB_IDX);     // reset PIN26 - P00 8 IN
-    P00_IOCR8.U |= (0x10 << PC9_BIT_LSB_IDX);     // reset PIN28 - P00 9 IN
-    P00_IOCR8.U |= (0x10 << PC10_BIT_LSB_IDX);     // reset PIN30 - P00 10 IN
-    P00_IOCR8.U |= (0x10 << PC11_BIT_LSB_IDX);// reset PIN32 - P00 10 IN
-    P00_IOCR12.U |= (0x10 << PC12_BIT_LSB_IDX);// reset PIN34 - P00 10 IN
-    P33_IOCR0.U |= (0x10 << PC2_BIT_LSB_IDX);// reset PIN36 - P00 10 IN
-    P33_IOCR0.U |= (0x10 << PC1_BIT_LSB_IDX);// reset PIN38 - P00 10 IN
-    P33_IOCR0.U |= (0x10 << PC0_BIT_LSB_IDX);// reset PIN40 - P00 10 IN
+    P14_IOCR0.U |= (0x10 << PC0_BIT_LSB_IDX);       // set PIN24 - P15 6 IN
+    P15_IOCR4.U |= (0x10 << PC6_BIT_LSB_IDX);       // reset PIN24 - P15 6 IN
+    P00_IOCR8.U |= (0x10 << PC8_BIT_LSB_IDX);       // reset PIN26 - P00 8 IN
+    P00_IOCR8.U |= (0x10 << PC9_BIT_LSB_IDX);       // reset PIN28 - P00 9 IN
+    P00_IOCR8.U |= (0x10 << PC10_BIT_LSB_IDX);      // reset PIN30 - P00 10 IN
+    P00_IOCR8.U |= (0x10 << PC11_BIT_LSB_IDX);      // reset PIN32 - P00 10 IN
+    P00_IOCR12.U |= (0x10 << PC12_BIT_LSB_IDX);     // reset PIN34 - P00 10 IN
+    P33_IOCR0.U |= (0x10 << PC2_BIT_LSB_IDX);       // reset PIN36 - P00 10 IN
+    P33_IOCR0.U |= (0x10 << PC1_BIT_LSB_IDX);       // reset PIN38 - P00 10 IN
+    P33_IOCR0.U |= (0x10 << PC0_BIT_LSB_IDX);       // reset PIN40 - P00 10 IN
 }
 
 void sendGPIOSignal(void)
 {
         // send GPIO signal
-        P10_OUT.U |= (signal[0] << PC1_BIT_LSB_IDX);
-        P14_OUT.U |= (signal[1]  << PC0_BIT_LSB_IDX);     // reset PIN24 - P15 6
+        P10_OUT.U |= (signal[0] << PC1_BIT_LSB_IDX);      // reset PIN22 - P10 1
+        P14_OUT.U |= (signal[1]  << PC0_BIT_LSB_IDX);     // reset PIN24 - P14 0
         P15_OUT.U |= (signal[2]  << PC6_BIT_LSB_IDX);     // reset PIN24 - P15 6
-        P00_OUT.U |= (signal[3] << PC8_BIT_LSB_IDX);     // reset PIN26 - P00 8
-        P00_OUT.U |= (signal[4] << PC9_BIT_LSB_IDX);     // reset PIN28 - P00 9
+        P00_OUT.U |= (signal[3] << PC8_BIT_LSB_IDX);      // reset PIN26 - P00 8
+        P00_OUT.U |= (signal[4] << PC9_BIT_LSB_IDX);      // reset PIN28 - P00 9
         P00_OUT.U |= (signal[5] << PC10_BIT_LSB_IDX);     // reset PIN30 - P00 10
-        P00_OUT.U |= (signal[6] << PC11_BIT_LSB_IDX);// reset PIN32 - P00 10
-        P00_OUT.U |= (signal[7] << PC12_BIT_LSB_IDX);// reset PIN34 - P00 10
+        P00_OUT.U |= (signal[6] << PC11_BIT_LSB_IDX);     // reset PIN32 - P00 10
+        P00_OUT.U |= (signal[7] << PC12_BIT_LSB_IDX);     // reset PIN34 - P00 10
 }
