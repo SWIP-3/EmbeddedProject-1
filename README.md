@@ -6,11 +6,6 @@
 |:-:|:-:|:-:|:-:|:-:|
 |<a href="https://github.com/Seyoung9304"><img src="src/1.png" width='200px'></a>|<a href="https://github.com/vlzscoder"><img src="src/2.png" width='200px'></a>|<a href="https://github.com/jungwoohan72"><img src="src/4.png" width='200px'></a>|<a href="https://github.com/CoderHun"><img src="src/5.png" width='200px'></a>|<a href="https://github.com/lhunki"><img src="src/6.png" width='200px'></a>|
 
-## Hardware Specification
-- ShieldBuddy TC275
-- Arduino Motor Shield
-- Yurobot Module Shield V1
-
 ## Proposed System
 ### Functional Specification
 1. Our system employs an ultrasonic sensor with a low-pass filter to accurately detect driver drowsiness, ensuring reliable responsiveness even in noisy driving environments.
@@ -23,14 +18,27 @@
 - To resolve a register overlap issue, the Sonic sensor was mounted on the YUROBOT board, and the motor was attached to the Arduino board. The two boards were then linked through GPIO pins to create an integrated system.
 - The driver monitoring program runs on CPU0, and CPU1 has been assigned a watchdog that can continuously monitor the status of the program.
 
-<img src="src/hw.png" width='600px'>
-<img src="src/hw_pic.png" width='600px'>
+<p align="center">
+    <img src="src/hw.png" width='600px'>
+</p>
+<p align="center">
+    <img src="src/hw_.png" width='600px'>
+</p>
+
+### Hardware Specification
+- ShieldBuddy TC275
+- Arduino Motor Shield
+- Yurobot Module Shield V1
 
 ### Sequence Diagram
-<img src="src/sequence.png" width='600px'>
+<p align="center">
+    <img src="src/sequence.png" width='600px'>    
+</p>
 
 ### Flow Chart
-<img src="src/flow.png" width='600px'>
+<p align="center">
+    <img src="src/flow.png" width='600px'>
+</p>
 
 ## Issues
 ### Refined Implementation Versions
