@@ -168,7 +168,9 @@ int core0_main(void)
 
         if (arr[2]!=0)  // signal detected - sleep level 3
         {
-            duty = 0;
+            for(int i=0; i<1000000; i++);
+            if(duty > 200)
+                duty -= 100;
         }
         else
         {
